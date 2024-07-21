@@ -26,6 +26,15 @@ if world.LOAD:
         world.cprint(f"loaded model weights from {weight_file}")
     except FileNotFoundError:
         print(f"{weight_file} not exists, start from beginning")
+
+# users = torch.Tensor(list(range(1000))).long()
+# ratings = Recmodel.getUsersRating(users)
+
+# print(ratings.shape)
+# print(np.min(ratings))
+# print(np.max(ratings))
+# print(np.mean(ratings))
+
 Neg_k = 1
 
 # init tensorboard

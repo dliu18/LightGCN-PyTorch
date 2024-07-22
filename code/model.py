@@ -43,6 +43,7 @@ class PureMF(BasicModel):
         self.num_users  = dataset.n_users
         self.num_items  = dataset.m_items
         self.latent_dim = config['latent_dim_rec']
+        self.lam = config["reg_lam"]
         self.f = nn.Sigmoid()
         self.__init_weight()
         
@@ -67,10 +68,24 @@ class PureMF(BasicModel):
         pos_scores= torch.sum(users_emb*pos_emb, dim=1)
         neg_scores= torch.sum(users_emb*neg_emb, dim=1)
         loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
-        reg_loss = (1/2)*(users_emb.norm(2).pow(2) + 
+        reg_loss = self.lam*(users_emb.norm(2).pow(2) + 
                           pos_emb.norm(2).pow(2) + 
                           neg_emb.norm(2).pow(2))/float(len(users))
         return loss, reg_loss
+
+    def l2_loss(self, users, pos, neg):
+        users_emb = self.embedding_user(users.long())
+        pos_emb   = self.embedding_item(pos.long())
+        neg_emb   = self.embedding_item(neg.long())
+        
+        pos_scores = torch.mul(users_emb, pos_emb)
+        pos_scores = torch.sum(pos_scores, dim=1)
+        neg_scores = torch.mul(users_emb, neg_emb)
+        neg_scores = torch.sum(neg_scores, dim=1)
+
+        loss = (1 - pos_scores).norm(2).pow(2) + neg_scores.norm(2).pow(2)
+
+        return loss
         
     def forward(self, users, items):
         users = users.long()
@@ -87,6 +102,7 @@ class LightGCN(BasicModel):
         super(LightGCN, self).__init__()
         self.config = config
         self.dataset : dataloader.BasicDataset = dataset
+        self.lam: float = config["reg_lam"]
         self.__init_weight()
 
     def __init_weight(self):
@@ -191,7 +207,7 @@ class LightGCN(BasicModel):
     def bpr_loss(self, users, pos, neg):
         (users_emb, pos_emb, neg_emb, 
         userEmb0,  posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
-        reg_loss = (1/2)*(userEmb0.norm(2).pow(2) + 
+        reg_loss = self.lam*(userEmb0.norm(2).pow(2) + 
                          posEmb0.norm(2).pow(2)  +
                          negEmb0.norm(2).pow(2))/float(len(users))
         pos_scores = torch.mul(users_emb, pos_emb)
@@ -204,15 +220,17 @@ class LightGCN(BasicModel):
         return loss, reg_loss
 
     def l2_loss(self, users, pos, neg):
-        userEmb0,  posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
-        reg_loss = (1/2)*(userEmb0.norm(2).pow(2) + 
-                         posEmb0.norm(2).pow(2)  +
-                         negEmb0.norm(2).pow(2))/float(len(users))
+        (users_emb, pos_emb, neg_emb,
+        _,  _, _) = self.getEmbedding(users.long(), pos.long(), neg.long())
         pos_scores = torch.mul(users_emb, pos_emb)
         pos_scores = torch.sum(pos_scores, dim=1)
         neg_scores = torch.mul(users_emb, neg_emb)
         neg_scores = torch.sum(neg_scores, dim=1)
-       
+
+        loss = (1 - pos_scores).norm(2).pow(2) + neg_scores.norm(2).pow(2)
+
+        return loss
+        
     def forward(self, users, items):
         # compute embedding
         all_users, all_items = self.computer()
